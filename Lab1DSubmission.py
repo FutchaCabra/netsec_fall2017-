@@ -1,4 +1,5 @@
 import asyncio
+from asyncio import Protocol
 import playground 
 from playground.network.packet import PacketType
 from playground.network.packet.fieldtypes import UINT32, STRING, BUFFER, BOOL, ListFieldType
@@ -119,10 +120,10 @@ def basicUnitTest():
 	loop = asyncio.get_event_loop()
 	#loop.create_server(lambda:server(),port=8000)
 	#- this is listening protocol in asyncio, creates server using asyncio
-	x = playground.getConnector()create_playground_server(lambda:ServerProtocol(),port = 8000)
+	coro = playground.getConnector().create_playground_server(lambda:ServerProtocol(),port = 8000)
 	#loop.create_connection (lambda: client(), host="127.0.0.1", port=8000) 
 	# creates outbound connection in asyncio
-	y = playground.getConnector().create_playground_connection (lambda:ClientProtocol(),20174.1.1.1,port = 8000)
+	playground.getConnector().create_playground_connection (lambda:ClientProtocol(),host="20174.1.1.1",port = 8000)
 	# look at coroutine from python pages. 18.5.4.3.1. TCP echo client protocol for lab1D
 	#if loop.is_running: 
 		#print ("loop is running")
