@@ -20,18 +20,19 @@ class LowerStackingProtocol(StackingProtocol):
 		self.transport = None
 		super().__init__
 			
-	def connection_made(higher_transport):
-		self.higherProtocol().connection_made()
+	def connection_made(self,transport):
+		self.transport = transport
+		self.higherProtocol().connection_made(self.transport)
 	
 		
-	def data_Received(higher_transport):
+	def data_Received(self,data):
 		self.higherProtocol().data_Received(data)
 						
-	def connection_lost(higher_transport):
-		self.higherProtocol().connection_lost()
+	def connection_lost(self):
+		self.transport = None
 		
 class EchoControl:
-	def buildProtocol():
+	def buildProtocol(self):
 		return ClientProtocol()
 	
 class HigherStackingProtocol(StackingProtocol):
@@ -39,21 +40,17 @@ class HigherStackingProtocol(StackingProtocol):
 		self.transport = None
 		super().__init__
 		
-	def connection_made(lower_transport):
-		self.lowerProtocol().connection_made()
+	def connection_made(self,transport):
+		self.transport = transport
+		self.higherProtocol().connection_made(self.transport)
 				
-	def data_Received(lower_transport):
-		self.lowerProtocol().data_Received(data)
+	def data_Received(self,data):
+		self.higherProtocol().data_Received(data)
 							
-	def connection_lost(lower_transport):
-		self.lowerProtocol().connection_lost()
-	
-def basicUnitTest():
-	mode = sys.argv[1]# this takes Command line arguments in python.0 = python, 1 = server, 2 = client. 
-	#in this scenario, so CL command "python3 Lab1E.py client" runs the client version of this code.  server runs the other.
-	print("\n",mode)
-	
-	class Username(PacketType): 
+	def connection_lost(self):
+		self.transport = None
+		
+class Username(PacketType): 
 	
 		DEFINITION_IDENTIFIER = "network.Username"
 		DEFINITION_VERSION = "2.0"
@@ -63,77 +60,84 @@ def basicUnitTest():
 			("data", BUFFER)
 			]	
 				
-	class PasswordRequest(PacketType): 
-	
-		DEFINITION_IDENTIFIER = "network.PasswordRequest"
-		DEFINITION_VERSION = "2.0"
-	
-		FIELDS = [
-			("Request", STRING),
-			("data", BUFFER)
-			]	
-	
-	
-	class UserPassword(PacketType):
-	
-		DEFINITION_IDENTIFIER = "network.UserPassword"
-		DEFINITION_VERSION = "2.0"
-	
-		FIELDS = [
-			("data", BUFFER)
-			]
-	
-	class ClientProtocol(asyncio.Protocol):
-		def __init__(self):
-			self.transport = None
-			
-		def connection_made(self, transport):
-			self.transport = transport
-			print ("Connection Made")
-			outgoingPacket = Username()
-			outgoingPacket.title="This is my user name"
-			outgoingPacket.data = (b"My user name is Sean")
-			self.transport.write(outgoingPacket.serialize())
-			
-			self._deserializer = PacketType.Deserializer()
-			
-		def data_Received(self, data):
-			self.deserializer.update(data)
-			
-			for pkt in self.deserializer.nextPackets():
-				if isinstance(pkt, PasswordRequest):
-					print ("Password Requested")
-			outgoingPacket = UserPassword()
-			outgoingPacket.title = "This is my Password"
-			outgoingPacket.data = (b"Password")
-			self.transport.write(outgoingPacket.serialize())
-						
-		def connection_lost(self, exc):
-			self.transport = None
-			print ("Connection Lost")
+class PasswordRequest(PacketType): 
+
+	DEFINITION_IDENTIFIER = "network.PasswordRequest"
+	DEFINITION_VERSION = "2.0"
+
+	FIELDS = [
+		("Request", STRING),
+		("data", BUFFER)
+		]	
+
+
+class UserPassword(PacketType):
+
+	DEFINITION_IDENTIFIER = "network.UserPassword"
+	DEFINITION_VERSION = "2.0"
+
+	FIELDS = [
+		("data", BUFFER)
+		]
+
+class ClientProtocol(asyncio.Protocol):
+	def __init__(self):
+		self.transport = None
 		
-	class ServerProtocol(asyncio.Protocol):
-		def __init__(self):
-			self.transport = None
-			
-		def connection_made(self, transport):
-			self.transport = transport
-			self._deserializer = PacketType.Deserializer()
-			
-		def data_Received(self, data):
-			self.deserializer.update(data)
-			for pkt in self.deserializer.nextPackets():
-				if isinstance(pkt, Username):
-					print ("Username Received")
-				elif isinstance(pkt, UserPassword):
-					print ("Password Received")
-			outgoingPacket = PasswordRequest()
-			outgoingPacket.title = "What is the Password?"
-			outgoingPacket.data = (b"What is your password?")
-			self.transport.write(outgoingPacket.serialize())
-			
-		def connection_lost(self, exc):
-			self.transport = None
+	def connection_made(self, transport):
+		self.transport = transport
+		print ("Connection Made")
+		outgoingPacket = Username()
+		outgoingPacket.title="This is my user name"
+		outgoingPacket.data = (b"My user name is Sean")
+		self.transport.write(outgoingPacket.__serialize__())
+		
+		self._deserializer = PacketType.Deserializer()
+		
+	def data_Received(self, data):
+		self.deserializer.update(data)
+		
+		for pkt in self.deserializer.nextPackets():
+			if isinstance(pkt, PasswordRequest):
+				print ("Password Requested")
+		outgoingPacket = UserPassword()
+		outgoingPacket.title = "This is my Password"
+		outgoingPacket.data = (b"Password")
+		self.transport.write(outgoingPacket.__serialize__())
+					
+	def connection_lost(self, exc):
+		self.transport = None
+		print ("Connection Lost")
+	
+class ServerProtocol(asyncio.Protocol):
+	def __init__(self):
+		self.transport = None
+		
+	def connection_made(self, transport):
+		self.transport = transport
+		self._deserializer = PacketType.Deserializer()
+		
+	def data_Received(self, data):
+		self.deserializer.update(data)
+		for pkt in self.deserializer.nextPackets():
+			if isinstance(pkt, Username):
+				print ("Username Received")
+			elif isinstance(pkt, UserPassword):
+				print ("Password Received")
+		outgoingPacket = PasswordRequest()
+		outgoingPacket.title = "What is the Password?"
+		outgoingPacket.data = (b"What is your password?")
+		self.transport.write(outgoingPacket.serialize())
+		
+	def connection_lost(self, exc):
+		self.transport = None
+		
+def basicUnitTest():
+	mode = sys.argv[1]# this takes Command line arguments in python.0 = python, 1 = server, 2 = client. 
+	#in this scenario, so CL command "python3 Lab1E.py client" runs the client version of this code.  server runs the other.
+	print("\n",mode)
+	
+	
 
 #Client  needs to have below code in both client and server, creating a passthrough connection for the layers to work
 	if mode == "client":
@@ -142,7 +146,7 @@ def basicUnitTest():
 		playground.setConnector("passthrough", ptConnector)
 		loop = asyncio.get_event_loop()
 		conn = EchoControl()
-		coro = playground.getConnector("passthrough").create_playground_connection(lambda : ClientProtocol(), "20174.1.1.1", 101)
+		coro = playground.getConnector("passthrough").create_playground_connection(conn.buildProtocol, "20174.1.1.1", 101)
 		client = loop.run_until_complete(coro)
 		print("Echo Client Connected.")
 		loop.run_forever()
