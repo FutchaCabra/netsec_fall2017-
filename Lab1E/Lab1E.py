@@ -1,56 +1,165 @@
 import asyncio
 from asyncio import Protocol
 import playground 
+#import Lab1DSubmissionUpdated
+#from Lab1DSubmissionUpdated import ClientProtocol, ServerProtocol
 from playground.network.packet import PacketType
 from playground.network.common import StackingProtocol, StackingTransport, StackingProtocolFactory
 from playground.network.packet.fieldtypes import UINT32, STRING, BUFFER, BOOL, ListFieldType
 import os, sys
-import logging 
-log = logging.getLogger(__name__)
- 
+loop = asyncio.get_event_loop()
+loop.set_debug(enabled=True)
+import logging
+logging.getLogger().setLevel(logging.NOTSET) # this loggs everything going on
+logging.getLogger().addHandler(logging.StreamHandler())
+# logs to stderr (find out what this is)
+
 			
-class LowerStackingProtocol(playground.StackingProtocol):
+class LowerStackingProtocol(StackingProtocol):
 	def __init__(self):
 		self.transport = None
-		log.debug("Lower Stacking Protocol Initiated")
-		
+		super().__init__
+			
 	def connection_made(higher_transport):
 		self.higherProtocol().connection_made()
-		log.debug("Lower Connection Made")
+	
 		
 	def data_Received(higher_transport):
 		self.higherProtocol().data_Received(data)
-		#self.transport.write(outgoingPacket.serialize())
-		log.debug("data received from higher")
-					
+						
 	def connection_lost(higher_transport):
 		self.higherProtocol().connection_lost()
-		log.debug("Connection Lost from higher")
 		
-
-class HigherStackingProtocol(playground.StackingProtocol):
+class EchoControl:
+	def buildProtocol():
+		return ClientProtocol()
+	
+class HigherStackingProtocol(StackingProtocol):
 	def __init__(self):
 		self.transport = None
+		super().__init__
 		
 	def connection_made(lower_transport):
 		self.lowerProtocol().connection_made()
-		#self.transport.write(outgoingPacket.serialize())
-		#self._deserializer = PacketType.Deserializer()
-		log.debug("Higher Connection Made")
-		
+				
 	def data_Received(lower_transport):
 		self.lowerProtocol().data_Received(data)
-		#self.deserializer.update(data)
-		#self.transport.write(outgoingPacket.serialize())
-		log.debug("data received from lower")
-					
+							
 	def connection_lost(lower_transport):
-		self.lowerProtocol()connection_lost()
-		log.debug ("Higher Connection Lost")
-
-f=StackingProtocolFactory(lambda:LowerStackingProtocol(),lambda:HigherStackingProtocol())
-
-ptConnector=playground.Connector(protocolStack=f)
-playground.setConnector("Passthrough",ptConnector)
-		
+		self.lowerProtocol().connection_lost()
 	
+def basicUnitTest():
+	mode = sys.argv[1]# this takes Command line arguments in python.0 = python, 1 = server, 2 = client. 
+	#in this scenario, so CL command "python3 Lab1E.py client" runs the client version of this code.  server runs the other.
+	print("\n",mode)
+	
+	class Username(PacketType): 
+	
+		DEFINITION_IDENTIFIER = "network.Username"
+		DEFINITION_VERSION = "2.0"
+	
+		FIELDS = [
+			("title", STRING),
+			("data", BUFFER)
+			]	
+				
+	class PasswordRequest(PacketType): 
+	
+		DEFINITION_IDENTIFIER = "network.PasswordRequest"
+		DEFINITION_VERSION = "2.0"
+	
+		FIELDS = [
+			("Request", STRING),
+			("data", BUFFER)
+			]	
+	
+	
+	class UserPassword(PacketType):
+	
+		DEFINITION_IDENTIFIER = "network.UserPassword"
+		DEFINITION_VERSION = "2.0"
+	
+		FIELDS = [
+			("data", BUFFER)
+			]
+	
+	class ClientProtocol(asyncio.Protocol):
+		def __init__(self):
+			self.transport = None
+			
+		def connection_made(self, transport):
+			self.transport = transport
+			print ("Connection Made")
+			outgoingPacket = Username()
+			outgoingPacket.title="This is my user name"
+			outgoingPacket.data = (b"My user name is Sean")
+			self.transport.write(outgoingPacket.serialize())
+			
+			self._deserializer = PacketType.Deserializer()
+			
+		def data_Received(self, data):
+			self.deserializer.update(data)
+			
+			for pkt in self.deserializer.nextPackets():
+				if isinstance(pkt, PasswordRequest):
+					print ("Password Requested")
+			outgoingPacket = UserPassword()
+			outgoingPacket.title = "This is my Password"
+			outgoingPacket.data = (b"Password")
+			self.transport.write(outgoingPacket.serialize())
+						
+		def connection_lost(self, exc):
+			self.transport = None
+			print ("Connection Lost")
+		
+	class ServerProtocol(asyncio.Protocol):
+		def __init__(self):
+			self.transport = None
+			
+		def connection_made(self, transport):
+			self.transport = transport
+			self._deserializer = PacketType.Deserializer()
+			
+		def data_Received(self, data):
+			self.deserializer.update(data)
+			for pkt in self.deserializer.nextPackets():
+				if isinstance(pkt, Username):
+					print ("Username Received")
+				elif isinstance(pkt, UserPassword):
+					print ("Password Received")
+			outgoingPacket = PasswordRequest()
+			outgoingPacket.title = "What is the Password?"
+			outgoingPacket.data = (b"What is your password?")
+			self.transport.write(outgoingPacket.serialize())
+			
+		def connection_lost(self, exc):
+			self.transport = None
+
+#Client  needs to have below code in both client and server, creating a passthrough connection for the layers to work
+	if mode == "client":
+		f = StackingProtocolFactory(lambda: HigherStackingProtocol(), lambda: LowerStackingProtocol())
+		ptConnector = playground.Connector(protocolStack=f)
+		playground.setConnector("passthrough", ptConnector)
+		loop = asyncio.get_event_loop()
+		conn = EchoControl()
+		coro = playground.getConnector("passthrough").create_playground_connection(lambda : ClientProtocol(), "20174.1.1.1", 101)
+		client = loop.run_until_complete(coro)
+		print("Echo Client Connected.")
+		loop.run_forever()
+		loop.close()
+
+
+#Server
+	if mode == "server":
+		f = StackingProtocolFactory(lambda: HigherStackingProtocol(), lambda: LowerStackingProtocol())
+		ptConnector = playground.Connector(protocolStack=f)
+		playground.setConnector("passthrough", ptConnector)
+		loop = asyncio.get_event_loop()
+		coro = playground.getConnector("passthrough").create_playground_server(lambda: ServerProtocol(), 101)
+		server = loop.run_until_complete(coro)
+		print("Echo Server Started ")
+		loop.run_forever()
+		loop.close()
+
+if __name__=="__main__":
+	basicUnitTest()	
